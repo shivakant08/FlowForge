@@ -1,0 +1,300 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum RoleName {
+  SUPER_ADMIN
+  ORG_ADMIN
+  HEAD_ACCOUNTANT
+  ACCOUNTANT
+  APPROVER
+  VIEWER
+}
+
+enum TransactionStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
+
+enum LedgerEntryType {
+  DEBIT
+  CREDIT
+}
+
+enum AuditAction {
+  CREATED
+  UPDATED
+  APPROVED
+  REJECTED
+  CANCELLED
+  PROCESSING_STARTED
+  COMPLETED
+  FAILED
+}
+
+enum NotificationType {
+  TRANSACTION_CREATED
+  TRANSACTION_APPROVED
+  TRANSACTION_REJECTED
+  TRANSACTION_FAILED
+  TRANSACTION_COMPLETED
+}
+
+// ============================================================
+// USER
+// ============================================================
+
+model User {
+  id           String @id @default(uuid())
+  name         String
+  email        String @unique
+  passwordHash String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  refreshTokens RefreshToken[]
+
+  memberships          Membership[]
+  createdTransactions  Transaction[]  @relation("TransactionCreatedBy")
+  approvedTransactions Transaction[]  @relation("TransactionApprovedBy")
+  auditLogs            AuditLog[]
+  notifications        Notification[]
+
+  @@index([email])
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ============================================================
+// ORGANIZATION
+// ============================================================
+
+model Organization {
+  id   String @id @default(uuid())
+  name String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships  Membership[]
+  accounts     Account[]
+  transactions Transaction[]
+  auditLogs    AuditLog[]
+
+  @@index([name])
+}
+
+// ============================================================
+// ROLE
+// ============================================================
+
+model Role {
+  id   String   @id @default(uuid())
+  name RoleName @unique
+
+  memberships Membership[]
+}
+
+// ============================================================
+// MEMBERSHIP
+// ============================================================
+
+model Membership {
+  id String @id @default(uuid())
+
+  userId         String
+  organizationId String
+  roleId         String
+
+  createdAt DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role         Role         @relation(fields: [roleId], references: [id])
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@index([userId])
+}
+
+// ============================================================
+// ACCOUNT
+// ============================================================
+
+model Account {
+  id String @id @default(uuid())
+
+  organizationId String
+  name           String
+  type           AccountType
+  currency       String      @default("INR")
+
+  // Stored using PostgreSQL NUMERIC.
+  balance Decimal @default(0) @db.Decimal(19, 4)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  ledgerEntries LedgerEntry[]
+
+  @@index([organizationId])
+  @@index([organizationId, type])
+}
+
+// ============================================================
+// TRANSACTION
+// ============================================================
+
+model Transaction {
+  id String @id @default(uuid())
+
+  organizationId String
+
+  createdById  String
+  approvedById String?
+
+  amount   Decimal @db.Decimal(19, 4)
+  currency String  @default("INR")
+
+  description String
+
+  status TransactionStatus @default(DRAFT)
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  approvedAt  DateTime?
+  completedAt DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  createdBy User @relation("TransactionCreatedBy", fields: [createdById], references: [id])
+
+  approvedBy User? @relation("TransactionApprovedBy", fields: [approvedById], references: [id])
+
+  ledgerEntries LedgerEntry[]
+
+  auditLogs AuditLog[]
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([createdById])
+  @@index([approvedById])
+}
+
+// ============================================================
+// LEDGER ENTRY
+// ============================================================
+
+model LedgerEntry {
+  id String @id @default(uuid())
+
+  transactionId String
+  accountId     String
+
+  entryType LedgerEntryType
+
+  amount Decimal @db.Decimal(19, 4)
+
+  createdAt DateTime @default(now())
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([transactionId])
+  @@index([accountId])
+}
+
+// ============================================================
+// AUDIT LOG
+// ============================================================
+
+model AuditLog {
+  id String @id @default(uuid())
+
+  organizationId String
+  userId         String
+  transactionId  String?
+
+  action AuditAction
+
+  entityType String
+  entityId   String
+
+  oldValue Json?
+  newValue Json?
+
+  createdAt DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  user User @relation(fields: [userId], references: [id])
+
+  transaction Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([organizationId, createdAt])
+  @@index([entityType, entityId])
+  @@index([transactionId])
+}
+
+// ============================================================
+// NOTIFICATION
+// ============================================================
+
+model Notification {
+  id String @id @default(uuid())
+
+  userId String
+
+  type NotificationType
+
+  title   String
+  message String
+
+  isRead Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+}
