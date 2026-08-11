@@ -1,4 +1,4 @@
-import {z} from "zod"
+import {email, z} from "zod"
 
 export const registerSchema = z.object({
     name: z.string().trim().min(2, "Name must be at least 2 characters"),
@@ -12,9 +12,15 @@ export const registerSchema = z.object({
     
 })
 
+export const loginSchema = z.object({
+    email: z.string().trim().toLowerCase().email("Invalid email address"),
+    password: z.string().min(1, "Password is required")
+})
+
 export const refreshSchema = z.object({
     refreshToken : z.string().min(1, "Refresh token is required"),
 })
 
 export type RegisterInput = z.infer<typeof registerSchema>
 export type RefreshInput = z.infer<typeof refreshSchema>
+export type LoginInput = z.infer<typeof loginSchema>

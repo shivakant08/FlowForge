@@ -135,8 +135,9 @@ import crypto from "crypto";
 import jwt from "jsonwebtoken";
 
 import { prisma } from "../../config/database";
-import { RegisterInput } from "./auth.schema";
+import { LoginInput, RegisterInput } from "./auth.schema";
 import { env } from "../../config/env";
+
 
 export class AuthService {
   async register(input: RegisterInput) {
@@ -382,5 +383,89 @@ export class AuthService {
         };
       }
     );
+  }
+
+  async login(input: LoginInput) {
+    const { email, password } = input;
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+      include: {
+        memberships: {
+          include: {
+            role: true
+          }
+        }
+      }
+    });
+
+    if (!user) {
+      throw new Error("Invalid credentials.");
+    }
+
+    const isPasswordValid = await bcrypt.compare(
+      password,
+      user.passwordHash
+    );
+
+    if (!isPasswordValid) {
+      throw new Error("Invalid credentials.");
+    }
+
+    const primaryMembership = user.memberships[0];
+
+    if (!primaryMembership) {
+      throw new Error(
+        "User is not associated with an active organization."
+      );
+    }
+
+    const accessToken = this.generateAccessToken(
+      user.id,
+      primaryMembership.organizationId,
+      primaryMembership.role.name
+    );
+
+    const rawRefreshToken = this.generateRefreshToken();
+
+    const tokenHash = this.hashRefreshToken(
+      rawRefreshToken
+    );
+
+    const expiresAt = new Date();
+
+    expiresAt.setDate(
+      expiresAt.getDate() + 7
+    );
+
+    await prisma.refreshToken.create({
+      data: {
+        tokenHash,
+        userId: user.id,
+        expiresAt
+      }
+    });
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name
+      },
+      organizationId:
+        primaryMembership.organizationId,
+      role: primaryMembership.role.name,
+      accessToken,
+      refreshToken: rawRefreshToken
+    };
+  }
+  async logout(rawRefreshToken: string) {
+    const tokenHash = crypto.createHash("sha256").update(rawRefreshToken).digest("hex")
+
+    await prisma.refreshToken.updateMany({
+      where: { tokenHash, revokedAt: null },
+      data: { revokedAt: new Date() }
+    })
+    return { success: true }
   }
 }
