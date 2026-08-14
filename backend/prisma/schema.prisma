@@ -176,6 +176,7 @@ model Account {
 
   @@index([organizationId])
   @@index([organizationId, type])
+  @@unique([organizationId, name])
 }
 
 // ============================================================
