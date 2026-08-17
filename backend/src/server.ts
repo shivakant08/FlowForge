@@ -1,6 +1,7 @@
 import app from "./app"
 import {env} from "./config/env"
 import {prisma} from "./config/database"
+import { startNotificationWorker } from "./workers/notification.worker"
 
 async function startServer(){
     try {
@@ -37,3 +38,4 @@ async function startServer(){
 }
 
 startServer()
+startNotificationWorker()

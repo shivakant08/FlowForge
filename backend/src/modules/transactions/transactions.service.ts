@@ -1,5 +1,6 @@
 import { Prisma } from "../../../generated/prisma/client";
 import { prisma, } from "../../config/database";
+import { dispatchTransactionEvent } from "../../queues/transaction.queue";
 import { CreateTransactionInput } from "./transactions.schema";
 
 export class TransactionsService {
@@ -218,8 +219,17 @@ export class TransactionsService {
                     }
                 })
             }
+
+            await dispatchTransactionEvent({
+                transactionId: updatedTransaction.id,
+                organizationId,
+                userId: updatedTransaction.createdById,
+                type:"APPROVED",
+                amount:Number(updatedTransaction.amount)
+            })
             return updatedTransaction
         })
+        
     }
 
     async rejectTransaction(organizationId: string, userId: string, transactionId: string){
