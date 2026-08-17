@@ -65,5 +65,21 @@ export class AuthController {
         })
     }
 
+    async createUser(req: Request, res: Response){
+        try {
+            const organizationId = req.user!.organizationId
+            const result = await authService.createUser(organizationId, req.body)
+            return res.status(201).json({
+                success: true,
+                data: result
+            })
+        } catch (error: any) {
+            return res.status(400).json({
+                success: false,
+                error: error.message
+            })
+        }
+    }
+
 
 }

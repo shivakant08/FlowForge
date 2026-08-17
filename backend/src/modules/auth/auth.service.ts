@@ -468,4 +468,55 @@ export class AuthService {
     })
     return { success: true }
   }
+
+  async createUser(organizationId: string, input:{name:string, email: string,password: string, role: string}){
+    const {name, email, password, role} = input
+    const existingUser = await prisma.user.findUnique({where:{email}})
+
+    if(existingUser){
+      throw new Error("User with this email already exists.")
+    }
+
+    const roleRecord = await prisma.role.findUnique({
+      where:{name: role as any}
+    })
+
+    if(!roleRecord){
+      throw new Error(`${role} role not found.`)
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10)
+    return await prisma.$transaction(async(tx)=>{
+      const user = await tx.user.create({
+        data: {
+          name,
+          email, 
+          passwordHash
+        }
+      })
+
+      const memberShip = await tx.membership.create({
+        data:{
+          userId: user.id,
+          organizationId,
+          roleId: roleRecord.id
+        },
+        include:{
+          role: true
+        }
+      })
+
+      return {
+        user:{
+          id: user.id,
+          name: user.name,
+          email: user.email
+        },
+        memberShip:{
+          organizationId,
+          role: memberShip.role.name
+        }
+      }
+    })
+  }
 }

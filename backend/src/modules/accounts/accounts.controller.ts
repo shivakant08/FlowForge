@@ -2,6 +2,8 @@ import { Request, Response } from "express"
 import { AccountsService } from "./accounts.service"
 import { createAccountSchema } from "./accounts.schema"
 import { success } from "zod"
+import { authenticate } from "../../middleware/auth.middleware"
+import { AuthService } from "../auth/auth.service"
 
 const accountsService = new AccountsService()
 
@@ -27,6 +29,8 @@ export class AccountsController {
             return res.status(500).json({ success: false, error: error.message })
         }
     }
+
+    
 
 
     async seedDefault(req: Request, res: Response) {
