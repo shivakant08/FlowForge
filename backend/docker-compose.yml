@@ -1,22 +1,83 @@
+
+
+# # services:
+# #   postgres:
+# #     image: postgres:17
+# #     container_name: flowforge-postgres
+# #     restart: unless-stopped
+
+# #     environment:
+# #       POSTGRES_USER: flowforge
+# #       POSTGRES_PASSWORD: flowforge_dev
+# #       POSTGRES_DB: flowforge
+
+# #     ports:
+# #       - "5432:5432"
+
+# #     volumes:
+# #       - flowforge_postgres_data:/var/lib/postgresql/data
+
+# # volumes:
+# #   flowforge_postgres_data:
+
+
+# version: "3.8"
+
 # services:
 #   postgres:
 #     image: postgres:17
 #     container_name: flowforge-postgres
 #     restart: unless-stopped
-    
 #     environment:
 #       POSTGRES_USER: flowforge
 #       POSTGRES_PASSWORD: flowforge_dev
 #       POSTGRES_DB: flowforge
-
 #     ports:
 #       - "5432:5432"
-
 #     volumes:
 #       - flowforge_postgres_data:/var/lib/postgresql/data
-  
-#   volumes:
-#    flowforge_postgres
+
+#     healthcheck:
+#       test: ["CMD-SHELL", "pg_isready -U flowforge -d flowforge"]
+#       interval: 5s
+#       timeout: 5s
+#       retries: 5
+
+#   redis:
+#     image: redis:7-alpine
+#     container_name: flowforge-redis
+#     restart: unless-stopped
+#     ports:
+#       - "6379:6379"
+#     healthcheck:
+#       test: ["CMD", "redis-cli", "ping"]
+#       interval: 5s
+#       timeout: 5s
+#       retries: 5
+
+#   api:
+#     build: .
+#     container_name: flowforge-api
+#     restart: always
+#     ports:
+#       - "5000:5000"
+#     environment:
+#       NODE_ENV: production
+#       PORT: 5000
+#       DATABASE_URL: postgresql://flowforge:flowforge_dev@postgres:5432/flowforge?schema=public
+#       JWT_ACCESS_SECRET:
+#       REDIS_HOST: redis
+#       REDIS_PORT: 6379
+      
+#     depends_on:
+#       postgres:
+#         condition: service_healthy
+#       redis:
+#         condition: service_healthy
+
+# volumes:
+#   flowforge_postgres_data:
+
 
 services:
   postgres:
@@ -34,6 +95,57 @@ services:
 
     volumes:
       - flowforge_postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flowforge -d flowforge"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+
+  redis:
+    image: redis:7-alpine
+    container_name: flowforge-redis
+    restart: unless-stopped
+
+    ports:
+      - "6379:6379"
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+
+  api:
+    build: .
+    container_name: flowforge-api
+    restart: unless-stopped
+
+    ports:
+      - "5000:5000"
+
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+
+      DATABASE_URL: postgresql://flowforge:flowforge_dev@postgres:5432/flowforge
+
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN}
+
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
 
 volumes:
   flowforge_postgres_data:

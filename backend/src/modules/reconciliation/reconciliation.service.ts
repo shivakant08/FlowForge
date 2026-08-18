@@ -62,4 +62,73 @@ export class ReconciliationService{
             }
         })
     }
+
+    async getStatements(organizationId: string){
+        return await prisma.bankStatement.findMany({
+            where:{organizationId},
+            include:{
+                _count:{
+                    select:{items: true},
+                }
+            },
+            orderBy:{uploadedAt: "desc"}
+        })
+    }
+
+    async getStatementDetails(organizationId: string, statementId:string){
+        const statement = await prisma.bankStatement.findFirst({
+            where: {id: statementId, organizationId},
+            include:{
+                items:{
+                    include:{
+                        matchedEntry:{
+                            include:{
+                                account:true,
+                                transaction: true
+                            }
+                        }
+                    }
+                }
+            }
+        })
+        if(!statement){
+            throw new Error("Bank statement not found.")
+        }
+        return statement
+    }
+
+    async manualMatch(organizationId: string, reconciliationItemId:string, ledgerEntryId: string){
+        return await prisma.$transaction(async (tx)=>{
+            const item = await tx.reconciliationItem.findFirst({
+                where:{
+                    id: reconciliationItemId,
+                    bankStatement: {organizationId}
+                }
+            })
+
+            if(!item){
+                throw new Error("Reconciliation item not found.")
+            }
+
+            const entry = await tx.ledgerEntry.findFirst({
+                where:{
+                    id: ledgerEntryId,
+                    account:{organizationId},
+                    reconciliationItem:null
+                }
+            })
+
+            if(!entry){
+                throw new Error("Target ledger entry is invalid or already reconciled.")
+            }
+
+            return await tx.reconciliationItem.update({
+                where:{id: reconciliationItemId},
+                data:{
+                    status:"MATCHED",
+                    matchedEntryId: entry.id
+                }
+            })
+        })
+    }
 }
