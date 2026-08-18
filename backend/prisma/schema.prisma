@@ -63,6 +63,12 @@ enum NotificationType {
   TRANSACTION_COMPLETED
 }
 
+enum ReconciliationStatus {
+  UNMATCHED
+  MATCHED
+  DISCREPANCY
+}
+
 // ============================================================
 // USER
 // ============================================================
@@ -73,8 +79,8 @@ model User {
   email        String @unique
   passwordHash String
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
   refreshTokens RefreshToken[]
 
   memberships          Membership[]
@@ -111,10 +117,11 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  memberships  Membership[]
-  accounts     Account[]
-  transactions Transaction[]
-  auditLogs    AuditLog[]
+  memberships   Membership[]
+  accounts      Account[]
+  transactions  Transaction[]
+  auditLogs     AuditLog[]
+  bankStatement BankStatement[]
 
   @@index([name])
 }
@@ -174,9 +181,9 @@ model Account {
 
   ledgerEntries LedgerEntry[]
 
+  @@unique([organizationId, name])
   @@index([organizationId])
   @@index([organizationId, type])
-  @@unique([organizationId, name])
 }
 
 // ============================================================
@@ -239,6 +246,8 @@ model LedgerEntry {
 
   account Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
 
+  reconciliationItem ReconciliationItem?
+
   @@index([transactionId])
   @@index([accountId])
 }
@@ -298,4 +307,31 @@ model Notification {
 
   @@index([userId, isRead])
   @@index([userId, createdAt])
+}
+
+model BankStatement {
+  id             String               @id @default(uuid())
+  organizationId String
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  filename       String
+  uploadedAt     DateTime             @default(now())
+  items          ReconciliationItem[]
+
+  @@index([organizationId])
+}
+
+model ReconciliationItem {
+  id              String               @id @default(uuid())
+  bankstatementId String
+  bankStatement   BankStatement        @relation(fields: [bankstatementId], references: [id], onDelete: Cascade)
+  transactionDate DateTime
+  description     String
+  amount          Decimal              @db.Decimal(15, 2)
+  referenceNo     String?
+  status          ReconciliationStatus @default(UNMATCHED)
+  matchedEntryId  String?              @unique
+  matchedEntry    LedgerEntry?         @relation(fields: [matchedEntryId], references: [id])
+  createdAt       DateTime             @default(now())
+
+  @@index([bankstatementId])
 }
