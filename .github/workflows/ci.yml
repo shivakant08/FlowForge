@@ -1,3 +1,46 @@
+# name: Continuous Integration
+
+# on:
+#   push:
+#     branches: [ main, master ]
+#   pull_request:
+#     branches: [ main, master ]
+#   workflow_dispatch:
+
+# jobs:
+#   test:
+#     name: Run Tests & Build
+#     runs-on: ubuntu-latest
+
+#     defaults:
+#       run:
+#         working-directory: backend
+
+#     steps:
+#       - name: Checkout repository
+#         uses: actions/checkout@v4
+
+#       # Upgraded Node version to 22 LTS to eliminate deprecation warnings
+#       - name: Setup Node.js
+#         uses: actions/setup-node@v4
+#         with:
+#           node-version: 22
+#           cache: 'npm'
+#           # Explicitly points setup-node to the lockfile inside backend/
+#           cache-dependency-path: backend/package-lock.json
+
+#       - name: Install dependencies
+#         run: npm ci
+
+#       - name: Run Jest tests
+#         run: npx jest --forceExit
+#         env:
+#           NODE_ENV: test
+#           DATABASE_URL: "postgresql://flowforge:flowforge_dev@localhost:5432/flowforge"
+#           JWT_ACCESS_SECRET: "ci-secret-access-key"
+#           JWT_REFRESH_SECRET: "ci-secret-refresh-key"
+
+
 name: Continuous Integration
 
 on:
@@ -12,6 +55,22 @@ jobs:
     name: Run Tests & Build
     runs-on: ubuntu-latest
 
+    # Sidecar PostgreSQL service container
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: flowforge
+          POSTGRES_PASSWORD: flowforge_dev
+          POSTGRES_DB: flowforge
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     defaults:
       run:
         working-directory: backend
@@ -20,17 +79,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Upgraded Node version to 22 LTS to eliminate deprecation warnings
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: 'npm'
-          # Explicitly points setup-node to the lockfile inside backend/
           cache-dependency-path: backend/package-lock.json
 
       - name: Install dependencies
         run: npm ci
+
+      # Runs database migrations against the live container before tests execute
+      - name: Run Database Migrations
+        run: npm run db:migrate --if-present
+        env:
+          DATABASE_URL: "postgresql://flowforge:flowforge_dev@localhost:5432/flowforge"
 
       - name: Run Jest tests
         run: npx jest --forceExit
