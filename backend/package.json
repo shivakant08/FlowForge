@@ -4,6 +4,7 @@
   "description": "Flowforge backend",
   "main": "dist/src/server.js",
   "scripts": {
+    "postinstall": "prisma generate",
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/src/server.js",
