@@ -1,5 +1,5 @@
-import { Prisma } from "../../../generated/prisma/client";
-import { prisma, } from "../../config/database";
+import { Prisma } from "@prisma/client";
+import { prisma } from "../../config/database";
 import { dispatchTransactionEvent } from "../../queues/transaction.queue";
 import { CreateTransactionInput } from "./transactions.schema";
 
@@ -10,7 +10,7 @@ export class TransactionsService {
         const totalAmount = entries.filter((e) => e.entryType === "DEBIT").reduce((sum, e) => sum + e.amount, 0)
         const accountIds = [...new Set(entries.map((e) => e.accountId))]
 
-        return await prisma.$transaction(async (tx) => {
+        return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
             const accounts = await tx.account.findMany({
                 where: {
                     id: { in: accountIds },
@@ -37,7 +37,11 @@ export class TransactionsService {
             })
 
             for(const entry of entries){
-                const account = accountMap.get(entry.accountId)!
+                const account = accountMap.get(entry.accountId)
+                if (!account) {
+                    throw new Error(`Account ${entry.accountId} not found.`)
+                }
+
                 const entryAmount = new Prisma.Decimal(entry.amount)
 
                 await tx.ledgerEntry.create({
@@ -104,7 +108,7 @@ export class TransactionsService {
     }
 
     async submitApproval(organizationId: string, userId:string, input: {description: string; currency?: string;amount:number}){
-        return await prisma.$transaction(async (tx)=>{
+        return await prisma.$transaction(async (tx: Prisma.TransactionClient)=>{
             const transaction = await tx.transaction.create({
                 data:{
                     organizationId,
@@ -132,7 +136,7 @@ export class TransactionsService {
     }
 
     async approveTransaction(organizationId: string, approverId: string, transactionId: string, entries: Array<{accountId: string; entryType:"DEBIT" | "CREDIT"; amount: number}>, idempotencyKey?: string){
-        return await prisma.$transaction(async (tx)=>{
+        return await prisma.$transaction(async (tx: Prisma.TransactionClient)=>{
             const transaction = await tx.transaction.findFirst({
                 where:{id: transactionId, organizationId}
             })
@@ -158,6 +162,10 @@ export class TransactionsService {
 
             for(const entry of entries){
                 const account = accountMap.get(entry.accountId)
+                if (!account) {
+                    throw new Error(`Account ${entry.accountId} not found.`)
+                }
+
                 const entryAmount = new Prisma.Decimal(entry.amount)
 
                 await tx.ledgerEntry.create({
@@ -172,14 +180,14 @@ export class TransactionsService {
                 let  balanceAdjustment = new Prisma.Decimal(0)
                 const isDebit = entry.entryType === "DEBIT"
 
-                if(account?.type === "ASSET" || account?.type === "EXPENSE"){
+                if(account.type === "ASSET" || account.type === "EXPENSE"){
                     balanceAdjustment = isDebit ? entryAmount : entryAmount.negated()
                 }else{
                     balanceAdjustment = isDebit ? entryAmount.negated(): entryAmount
                 }
 
                 await tx.account.update({
-                    where:{id: account?.id},
+                    where:{id: account.id},
                     data:{balance:{increment:balanceAdjustment}}
                 })
             }
@@ -233,7 +241,7 @@ export class TransactionsService {
     }
 
     async rejectTransaction(organizationId: string, userId: string, transactionId: string){
-        return await prisma.$transaction(async (tx)=>{
+        return await prisma.$transaction(async (tx: Prisma.TransactionClient)=>{
             const transaction = await tx.transaction.findFirst({
                 where:{id: transactionId, organizationId}
             })

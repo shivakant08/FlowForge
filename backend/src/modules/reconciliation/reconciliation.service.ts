@@ -1,5 +1,5 @@
 import {prisma} from "../../config/database"
-import { Prisma } from "../../../generated/prisma/client"
+import { Prisma } from "@prisma/client"
 
 
 export interface BankStatementRow{
@@ -11,7 +11,7 @@ export interface BankStatementRow{
 
 export class ReconciliationService{
     async processSatement(organizationId: string, filename: string, rows :BankStatementRow[]){
-        return await prisma.$transaction(async (tx)=>{
+        return await prisma.$transaction(async (tx: Prisma.TransactionClient)=>{
             const statement = await tx.bankStatement.create({
                 data:{organizationId, filename}
             })
@@ -98,7 +98,7 @@ export class ReconciliationService{
     }
 
     async manualMatch(organizationId: string, reconciliationItemId:string, ledgerEntryId: string){
-        return await prisma.$transaction(async (tx)=>{
+        return await prisma.$transaction(async (tx: Prisma.TransactionClient)=>{
             const item = await tx.reconciliationItem.findFirst({
                 where:{
                     id: reconciliationItemId,

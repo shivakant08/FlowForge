@@ -134,6 +134,7 @@ import bcrypt from "bcrypt";
 import crypto from "crypto";
 import jwt from "jsonwebtoken";
 
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../config/database";
 import { LoginInput, RegisterInput } from "./auth.schema";
 import { env } from "../../config/env";
@@ -160,7 +161,7 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    return await prisma.$transaction(async (tx) => {
+    return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       // Find the role from the database
       const role = await tx.role.findUnique({
         where: {
@@ -336,7 +337,7 @@ export class AuthService {
     }
 
     return await prisma.$transaction(
-      async (tx) => {
+      async (tx: Prisma.TransactionClient) => {
         // Revoke old refresh token
         await tx.refreshToken.update({
           where: {
