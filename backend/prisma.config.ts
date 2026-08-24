@@ -9,7 +9,6 @@ export default defineConfig({
     path: "prisma/migrations"
   },
   datasource: {
-    // url: process.env("DATABASE_URL") || "",
-    url: env("DATABASE_URL"),
+    url: process.env.DATABASE_URL ?? "postgresql://flowforge:flowforge_dev@localhost:5432/flowforge",
   }
 });
