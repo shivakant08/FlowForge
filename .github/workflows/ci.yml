@@ -89,14 +89,21 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Runs database migrations against the live container before tests execute
+      - name: Build backend
+        run: npm run build
+
       - name: Run Database Migrations
-        run: npm run db:migrate --if-present
+        run: npm run db:migrate
+        env:
+          DATABASE_URL: "postgresql://flowforge:flowforge_dev@localhost:5432/flowforge"
+
+      - name: Seed database
+        run: npm run db:seed
         env:
           DATABASE_URL: "postgresql://flowforge:flowforge_dev@localhost:5432/flowforge"
 
       - name: Run Jest tests
-        run: npx jest --forceExit
+        run: npm test -- --forceExit
         env:
           NODE_ENV: test
           DATABASE_URL: "postgresql://flowforge:flowforge_dev@localhost:5432/flowforge"

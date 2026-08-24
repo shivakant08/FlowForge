@@ -216,6 +216,13 @@ services:
       redis:
         condition: service_healthy
 
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://localhost:5000/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
   frontend:
     build:
       context: ../frontend

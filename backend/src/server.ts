@@ -4,6 +4,7 @@ import {prisma} from "./config/database"
 import { startNotificationWorker } from "./workers/notification.worker"
 
 async function startServer(){
+    let worker: Awaited<ReturnType<typeof startNotificationWorker>> | undefined
     try {
         await prisma.$connect()
         console.log("✅ Database connected")
@@ -14,10 +15,16 @@ async function startServer(){
             )
         })
 
-        const shutdown = async (signal: string)=>{
+        worker = startNotificationWorker()
+
+        process.on("SIGTERM", ()=>shutdown("SIGTERM"))
+        process.on("SIGINT", ()=> shutdown("SIGINT"))
+
+        async function shutdown(signal: string) {
             console.log( `\n${signal} received. Shutting down...`)
 
             server.close(async()=>{
+                await worker?.close()
                 await prisma.$disconnect()
 
                 console.log("Database disconnected")
@@ -26,9 +33,6 @@ async function startServer(){
                 process.exit(0)
             })
         }
-
-        process.on("SIGTERM", ()=>shutdown("SIGTERM"))
-        process.on("SIGINT", ()=> shutdown("SIGINT"))
     } catch (error) {
         console.error("Failed to start server:", error)
 
@@ -38,4 +42,3 @@ async function startServer(){
 }
 
 startServer()
-startNotificationWorker()

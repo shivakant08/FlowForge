@@ -8,7 +8,9 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/src/server.js",
-    "test": "echo \"Tests coming soon\""
+    "test": "jest --runInBand",
+    "db:migrate": "prisma migrate deploy",
+    "db:seed": "prisma db seed"
   },
   "keywords": [
     "flowforge",
@@ -48,5 +50,8 @@
     "ts-jest": "^29.4.12",
     "tsx": "^4.23.11",
     "typescript": "^5.9.3"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   }
 }
