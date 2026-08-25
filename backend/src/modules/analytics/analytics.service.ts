@@ -1,8 +1,23 @@
 import { gte, lte } from "zod"
 import { prisma } from "../../config/database"
+import { buildMonthlyAnalytics } from "./analytics.logic"
 
 
 export class AnalyticsService {
+    async getMonthlyAnalytics(organizationId: string) {
+        const entries = await prisma.ledgerEntry.findMany({
+            where: { account: { organizationId } },
+            include: { account: true },
+        })
+
+        return buildMonthlyAnalytics(entries.map((entry) => ({
+            createdAt: entry.createdAt,
+            amount: Number(entry.amount),
+            entryType: entry.entryType,
+            accountType: entry.account.type,
+        })))
+    }
+
     async getCashFlowSummary(organizationId: string, startDate?: Date, endDate?: Date) {
         const dateFilter = {
             ...(startDate && { gte: startDate }),

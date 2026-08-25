@@ -10,6 +10,7 @@ import reconciliationRoutes from "./modules/reconciliation/reconcilation.routes"
 import transactionRoutes from "./modules/transactions/transactions.routes"
 import { notFoundMiddleware } from "./middleware/not-found.middleware"
 import { errorMiddleware } from "./middleware/error.middleware"
+import reportsRoutes from "./modules/reports/reports.routes"
 
 const app = express()
 
@@ -29,6 +30,7 @@ app.use("/api/v1/accounts", accountRoutes)
 app.use("/api/v1/transactions", transactionRoutes)
 app.use("/api/v1/analytics", analyticsRoutes)
 app.use("/api/v1/reconciliation", reconciliationRoutes)
+app.use("/api/v1/reports", reportsRoutes)
 
 //404
 app.use(notFoundMiddleware)

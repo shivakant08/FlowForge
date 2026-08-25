@@ -13,8 +13,8 @@ router.get("/", (req, res)=>controller.list(req, res))
 router.post("/", requireRole(["ORG_ADMIN", "HEAD_ACCOUNTANT", "ACCOUNTANT"]), (req, res)=>controller.create(req, res))
 
 router.post("/submit", requireRole(["ORG_ADMIN", "HEAD_ACCOUNTANT", "ACCOUNTANT"]), (req, res)=>controller.submitForApproval(req, res))
-router.post("/:id/approve", requireRole(["ORG_ADMIN", "HEAD_ACCOUNTANT", "ACCOUNTANT"]),enforceIdempotency, (req:Request<{id: string}>, res:Response)=>controller.approve(req, res))
-router.post("/:id/reject", requireRole(["ORG_ADMIN", "HEAD_ACCOUNTANT", "ACCOUNTANT"]), (req, res)=>controller.reject(req, res))
+router.post("/:id/approve", requireRole(["ORG_ADMIN", "HEAD_ACCOUNTANT"]),enforceIdempotency, (req:Request<{id: string}>, res:Response)=>controller.approve(req, res))
+router.post("/:id/reject", requireRole(["ORG_ADMIN", "HEAD_ACCOUNTANT"]), (req, res)=>controller.reject(req, res))
 
 
 export default router

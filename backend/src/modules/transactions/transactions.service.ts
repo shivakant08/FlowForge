@@ -4,7 +4,7 @@ import { dispatchTransactionEvent } from "../../queues/transaction.queue";
 import { CreateTransactionInput } from "./transactions.schema";
 
 export class TransactionsService {
-    async createTransaction(organizationId: string, userId: string, input: CreateTransactionInput) {
+    async createTransaction(organizationId: string, userId: string, input: CreateTransactionInput, role = "ORG_ADMIN") {
         const { description, currency, entries } = input
 
         const totalAmount = entries.filter((e) => e.entryType === "DEBIT").reduce((sum, e) => sum + e.amount, 0)
@@ -31,10 +31,26 @@ export class TransactionsService {
                     amount: new Prisma.Decimal(totalAmount),
                     currency,
                     description,
-                    status: 'COMPLETED',
-                    completedAt: new Date(),
+                    status: role === "ACCOUNTANT" ? "PENDING_APPROVAL" : "COMPLETED",
+                    completedAt: role === "ACCOUNTANT" ? undefined : new Date(),
+                    pendingEntries: role === "ACCOUNTANT" ? entries : undefined,
                 }
             })
+
+            if (role === "ACCOUNTANT") {
+                await tx.auditLog.create({
+                    data: {
+                        organizationId,
+                        userId,
+                        transactionId: transaction.id,
+                        action: "CREATED",
+                        entityType: "TRANSACTION",
+                        entityId: transaction.id,
+                        newValue: { amount: totalAmount, description, entriesCount: entries.length, status: "PENDING_APPROVAL" },
+                    }
+                })
+                return transaction
+            }
 
             for(const entry of entries){
                 const account = accountMap.get(entry.accountId)
@@ -135,7 +151,7 @@ export class TransactionsService {
         })
     }
 
-    async approveTransaction(organizationId: string, approverId: string, transactionId: string, entries: Array<{accountId: string; entryType:"DEBIT" | "CREDIT"; amount: number}>, idempotencyKey?: string){
+    async approveTransaction(organizationId: string, approverId: string, transactionId: string, entries?: Array<{accountId: string; entryType:"DEBIT" | "CREDIT"; amount: number}>, idempotencyKey?: string){
         return await prisma.$transaction(async (tx: Prisma.TransactionClient)=>{
             const transaction = await tx.transaction.findFirst({
                 where:{id: transactionId, organizationId}
@@ -149,7 +165,12 @@ export class TransactionsService {
                 throw new Error(`Cannot approve transaction in status '${transaction.status}'`)
             }
 
-            const accountIds = [...new Set(entries.map((e)=>e.accountId))]
+            const pendingEntries = (entries ?? transaction.pendingEntries) as Array<{accountId: string; entryType:"DEBIT" | "CREDIT"; amount: number}> | null
+            if (!pendingEntries?.length) {
+                throw new Error("Pending transaction has no ledger entries to approve.")
+            }
+
+            const accountIds = [...new Set(pendingEntries.map((e)=>e.accountId))]
             const accounts = await tx.account.findMany({
                 where:{id:{in:accountIds}, organizationId}
             })
@@ -160,7 +181,7 @@ export class TransactionsService {
 
             const accountMap = new Map(accounts.map((acc)=>[acc.id, acc]))
 
-            for(const entry of entries){
+            for(const entry of pendingEntries){
                 const account = accountMap.get(entry.accountId)
                 if (!account) {
                     throw new Error(`Account ${entry.accountId} not found.`)
@@ -198,7 +219,8 @@ export class TransactionsService {
                     status:"COMPLETED",
                     approvedById: approverId,
                     approvedAt: new Date(),
-                    completedAt: new Date()
+                    completedAt: new Date(),
+                    pendingEntries: Prisma.JsonNull
                 }
             })
 

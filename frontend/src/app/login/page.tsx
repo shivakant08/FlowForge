@@ -21,12 +21,18 @@ export default function LoginPage() {
 
         try {
             const response = await api.post('/auth/login', { email, password })
-            const { token, user } = response.data
+            const payload = response.data ?? {}
+            const token = payload.accessToken ?? payload.token
+            const user = payload.user
 
-            login(token, user)
+            if (!token || !user) {
+                throw new Error("Authentication response was missing the user or token.")
+            }
+
+            login(token, { ...user, role: payload.role })
             router.push("/dashboard")
         } catch (error: any) {
-            setError(error.response?.data?.message || "Invalid Credentials")
+            setError(error.response?.data?.message || error.response?.data?.error || error.message || "Invalid Credentials")
         } finally {
             setSubmitting(false)
         }

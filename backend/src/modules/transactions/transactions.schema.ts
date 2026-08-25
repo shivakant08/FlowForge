@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isBalancedTransaction } from "./transaction.logic";
 
 const ledgerEntryItemSchema = z.object({
     accountId: z.string().uuid("Invalid account ID format"),
@@ -14,9 +15,7 @@ export const createTransactionSchema = z.object({
 })
 .refine(
     (data)=>{
-        const totalDebits = data.entries.filter((e)=>e.entryType === "DEBIT").reduce((sum, e)=> sum + e.amount, 0)
-        const totalCredits = data.entries.filter((e)=>e.entryType === "CREDIT").reduce((sum, e)=> sum + e.amount, 0)
-        return Math.abs(totalDebits - totalCredits) < 0.0001
+        return isBalancedTransaction(data.entries)
     },
     {
         message:"Unbalanced Transaction: Sum of Debits must equal Sum of Credits",

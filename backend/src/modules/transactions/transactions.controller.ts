@@ -13,7 +13,7 @@ export class TransactionController {
             const validated = createTransactionSchema.parse(req.body)
 
             const transaction = await transactionsService.createTransaction(
-                organizationId, userId, validated
+                organizationId, userId, validated, req.user!.role
             )
 
             return res.status(201).json({ success: true, data: transaction })

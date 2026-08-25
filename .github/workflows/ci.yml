@@ -1,64 +1,26 @@
-# name: Continuous Integration
-
-# on:
-#   push:
-#     branches: [ main, master ]
-#   pull_request:
-#     branches: [ main, master ]
-#   workflow_dispatch:
-
-# jobs:
-#   test:
-#     name: Run Tests & Build
-#     runs-on: ubuntu-latest
-
-#     defaults:
-#       run:
-#         working-directory: backend
-
-#     steps:
-#       - name: Checkout repository
-#         uses: actions/checkout@v4
-
-#       # Upgraded Node version to 22 LTS to eliminate deprecation warnings
-#       - name: Setup Node.js
-#         uses: actions/setup-node@v4
-#         with:
-#           node-version: 22
-#           cache: 'npm'
-#           # Explicitly points setup-node to the lockfile inside backend/
-#           cache-dependency-path: backend/package-lock.json
-
-#       - name: Install dependencies
-#         run: npm ci
-
-#       - name: Run Jest tests
-#         run: npx jest --forceExit
-#         env:
-#           NODE_ENV: test
-#           DATABASE_URL: "postgresql://flowforge:flowforge_dev@localhost:5432/flowforge"
-#           JWT_ACCESS_SECRET: "ci-secret-access-key"
-#           JWT_REFRESH_SECRET: "ci-secret-refresh-key"
-
-
 name: Continuous Integration
 
 on:
   push:
     branches: [ main, master ]
   pull_request:
-    branches: [ main, master ]
+    branches: [main, master]
   workflow_dispatch:
 
-jobs:
-  test:
-    name: Run Tests & Build
-    runs-on: ubuntu-latest
+permissions:
+  contents: read
 
-    # Sidecar PostgreSQL service container
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend tests and build
+    runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:17-alpine
         env:
           POSTGRES_USER: flowforge
           POSTGRES_PASSWORD: flowforge_dev
@@ -67,45 +29,93 @@ jobs:
           - 5432:5432
         options: >-
           --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
+          --health-cmd "pg_isready -U flowforge -d flowforge"
+          --health-interval 5s
           --health-retries 5
-
-    defaults:
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
       run:
         working-directory: backend
 
-    steps:
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://flowforge:flowforge_dev@localhost:5432/flowforge
+      JWT_ACCESS_SECRET: ci-access-secret
+      JWT_REFRESH_SECRET: ci-refresh-secret
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
       - name: Checkout repository
-        uses: actions/checkout@v4
+      - name: Checkout
 
-      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: 'npm'
-          cache-dependency-path: backend/package-lock.json
+          cache: npm
 
-      - name: Install dependencies
         run: npm ci
 
-      - name: Build backend
+      - name: Apply database migrations
+        env:
+      - name: TypeScript build
+        run: npm run build
+      - name: Run Jest tests
+        run: npm test -- --runInBand
+
+  frontend:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      NEXT_PUBLIC_API_URL: http://localhost:5000/api/v1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Next.js production build
         run: npm run build
 
-      - name: Run Database Migrations
-        run: npm run db:migrate
-        env:
-          DATABASE_URL: "postgresql://flowforge:flowforge_dev@localhost:5432/flowforge"
-
-      - name: Seed database
-        run: npm run db:seed
-        env:
-          DATABASE_URL: "postgresql://flowforge:flowforge_dev@localhost:5432/flowforge"
-
-      - name: Run Jest tests
-        run: npm test -- --forceExit
-        env:
-          NODE_ENV: test
-          DATABASE_URL: "postgresql://flowforge:flowforge_dev@localhost:5432/flowforge"
-          JWT_ACCESS_SECRET: "ci-secret-access-key"
-          JWT_REFRESH_SECRET: "ci-secret-refresh-key"
+  docker:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: backend
+            context: ./backend
+            dockerfile: ./backend/Dockerfile
+          - name: frontend
+            context: ./frontend
+            dockerfile: ./frontend/Dockerfile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build ${{ matrix.name }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: false
+          tags: flowforge/${{ matrix.name }}:ci
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}

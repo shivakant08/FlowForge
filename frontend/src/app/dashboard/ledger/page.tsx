@@ -2,29 +2,55 @@
 
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Receipt, Loader2, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Plus, Receipt, Loader2, ArrowUpRight, ArrowDownRight, Check, X } from 'lucide-react';
 import api from '@/lib/api';
+import { toast } from 'sonner';
+import { useAuth } from '@/context/AuthContext';
 
-interface LedgerEntry {
+interface TransactionEntry {
+  id: string;
+  entryType: 'DEBIT' | 'CREDIT';
+  amount: number | string;
+  account: { name: string };
+}
+
+interface TransactionRecord {
   id: string;
   description: string;
-  amount: number;
-  type: 'DEBIT' | 'CREDIT';
-  account: string;
+  amount: number | string;
+  status: 'PENDING_APPROVAL' | 'COMPLETED' | 'REJECTED' | string;
+  ledgerEntries: TransactionEntry[];
+  pendingEntries?: unknown;
   createdAt: string;
+}
+
+interface Account {
+  id: string;
+  name: string;
+  type: string;
 }
 
 export default function LedgerPage() {
   const [isOpen, setIsOpen] = useState(false);
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
-  const [type, setType] = useState<'DEBIT' | 'CREDIT'>('DEBIT');
-  const [account, setAccount] = useState('Assets:Cash');
+  const [debitAccountId, setDebitAccountId] = useState('');
+  const [creditAccountId, setCreditAccountId] = useState('');
 
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const canApprove = user?.role === 'ORG_ADMIN' || user?.role === 'HEAD_ACCOUNTANT';
+
+  const { data: accounts = [], isLoading: areAccountsLoading } = useQuery<Account[]>({
+    queryKey: ['accounts'],
+    queryFn: async () => {
+      const response = await api.get('/accounts');
+      return response.data;
+    },
+  });
 
   // Fetch transactions list
-  const { data: entries = [], isLoading } = useQuery<LedgerEntry[]>({
+  const { data: entries = [], isLoading } = useQuery<TransactionRecord[]>({
     queryKey: ['ledger-entries'],
     queryFn: async () => {
       const response = await api.get('/transactions');
@@ -32,9 +58,26 @@ export default function LedgerPage() {
     },
   });
 
+  const reviewMutation = useMutation({
+    mutationFn: async ({ id, action }: { id: string; action: 'approve' | 'reject' }) => {
+      return api.post(`/transactions/${id}/${action}`, action === 'approve' ? {} : undefined);
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['ledger-entries'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['financial-reports'] });
+      toast.success(variables.action === 'approve' ? 'Transaction approved.' : 'Transaction rejected.');
+    },
+    onError: (error: any) => toast.error(error.response?.data?.error || 'Unable to update transaction.'),
+  });
+
   // Create new transaction mutation
   const createEntryMutation = useMutation({
-    mutationFn: async (newEntry: { description: string; amount: number; type: string; account: string }) => {
+    mutationFn: async (newEntry: {
+      description: string;
+      currency: string;
+      entries: Array<{ accountId: string; entryType: 'DEBIT' | 'CREDIT'; amount: number }>;
+    }) => {
       return await api.post('/transactions', newEntry);
     },
     onSuccess: () => {
@@ -43,23 +86,31 @@ export default function LedgerPage() {
       queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
       setIsOpen(false);
       resetForm();
+      toast.success('Transaction created successfully.');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || 'Unable to create transaction.');
     },
   });
 
   const resetForm = () => {
     setDescription('');
     setAmount('');
-    setType('DEBIT');
-    setAccount('Assets:Cash');
+    setDebitAccountId('');
+    setCreditAccountId('');
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const transactionAmount = Number(amount);
+
     createEntryMutation.mutate({
       description,
-      amount: parseFloat(amount),
-      type,
-      account,
+      currency: 'INR',
+      entries: [
+        { accountId: debitAccountId, entryType: 'DEBIT', amount: transactionAmount },
+        { accountId: creditAccountId, entryType: 'CREDIT', amount: transactionAmount },
+      ],
     });
   };
 
@@ -98,8 +149,8 @@ export default function LedgerPage() {
             <thead className="bg-slate-950/50 text-slate-400 text-xs uppercase tracking-wider border-b border-slate-800">
               <tr>
                 <th className="px-6 py-4">Description</th>
-                <th className="px-6 py-4">Account</th>
-                <th className="px-6 py-4">Type</th>
+                <th className="px-6 py-4">Accounts</th>
+                <th className="px-6 py-4">Status</th>
                 <th className="px-6 py-4 text-right">Amount</th>
                 <th className="px-6 py-4 text-right">Date</th>
               </tr>
@@ -108,24 +159,22 @@ export default function LedgerPage() {
               {entries.map((item) => (
                 <tr key={item.id} className="hover:bg-slate-800/50 transition-colors">
                   <td className="px-6 py-4 font-medium text-white">{item.description}</td>
-                  <td className="px-6 py-4 text-slate-400">{item.account}</td>
+                  <td className="px-6 py-4 text-slate-400">{item.ledgerEntries?.map((entry) => entry.account.name).join(' / ') || 'Pending review'}</td>
                   <td className="px-6 py-4">
                     <span
-                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${
-                        item.type === 'DEBIT'
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                          : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                      }`}
+                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${item.status === 'PENDING_APPROVAL' ? 'border border-amber-500/20 bg-amber-500/10 text-amber-400' : item.status === 'COMPLETED' ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-400' : 'border border-rose-500/20 bg-rose-500/10 text-rose-400'}`}
                     >
-                      {item.type === 'DEBIT' ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                      {item.type}
+                      {item.status === 'PENDING_APPROVAL' ? 'Pending approval' : item.status}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right font-mono font-semibold text-white">
-                    ${item.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    ${Number(item.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </td>
                   <td className="px-6 py-4 text-right text-slate-500">
                     {new Date(item.createdAt).toLocaleDateString()}
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    {canApprove && item.status === 'PENDING_APPROVAL' && <span className="inline-flex gap-2"><button title="Approve transaction" onClick={() => reviewMutation.mutate({ id: item.id, action: 'approve' })} disabled={reviewMutation.isPending} className="rounded-md p-1.5 text-emerald-400 hover:bg-emerald-500/10"><Check className="h-4 w-4" /></button><button title="Reject transaction" onClick={() => reviewMutation.mutate({ id: item.id, action: 'reject' })} disabled={reviewMutation.isPending} className="rounded-md p-1.5 text-rose-400 hover:bg-rose-500/10"><X className="h-4 w-4" /></button></span>}
                   </td>
                 </tr>
               ))}
@@ -166,30 +215,50 @@ export default function LedgerPage() {
                 />
               </div>
 
+              <div>
+                <label className="block text-xs font-medium text-slate-400 uppercase mb-1">Debit Account</label>
+                <select
+                  required
+                  value={debitAccountId}
+                  onChange={(e) => setDebitAccountId(e.target.value)}
+                  disabled={areAccountsLoading}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="">Select debit account</option>
+                  {accounts.map((accountOption) => (
+                    <option key={accountOption.id} value={accountOption.id}>
+                      {accountOption.name} ({accountOption.type})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-400 uppercase mb-1">Credit Account</label>
+                <select
+                  required
+                  value={creditAccountId}
+                  onChange={(e) => setCreditAccountId(e.target.value)}
+                  disabled={areAccountsLoading}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="">Select credit account</option>
+                  {accounts.map((accountOption) => (
+                    <option key={accountOption.id} value={accountOption.id}>
+                      {accountOption.name} ({accountOption.type})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 uppercase mb-1">Entry Type</label>
-                  <select
-                    value={type}
-                    onChange={(e) => setType(e.target.value as 'DEBIT' | 'CREDIT')}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
-                  >
-                    <option value="DEBIT">Debit (Asset/Expense)</option>
-                    <option value="CREDIT">Credit (Liability/Revenue)</option>
-                  </select>
+                  <span className="block text-xs font-medium text-slate-400 uppercase mb-1">Debit</span>
+                  <p className="text-sm text-emerald-400">{amount || '0.00'}</p>
                 </div>
-
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 uppercase mb-1">Account Category</label>
-                  <select
-                    value={account}
-                    onChange={(e) => setAccount(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-emerald-500"
-                  >
-                    <option value="Assets:Cash">Assets: Cash</option>
-                    <option value="Liabilities:Payable">Liabilities: Payable</option>
-                    <option value="Revenue:Services">Revenue: Services</option>
-                  </select>
+                  <span className="block text-xs font-medium text-slate-400 uppercase mb-1">Credit</span>
+                  <p className="text-sm text-rose-400">{amount || '0.00'}</p>
                 </div>
               </div>
 

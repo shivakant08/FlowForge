@@ -3,6 +3,15 @@ import { AnalyticsService } from "./analytics.service"
 const analyticsService = new AnalyticsService()
 
 export class AnalyticsController {
+    async getMonthlyAnalytics(req: Request, res: Response) {
+        try {
+            const data = await analyticsService.getMonthlyAnalytics(req.user!.organizationId)
+            return res.status(200).json({ success: true, data })
+        } catch (error: any) {
+            return res.status(500).json({ success: false, error: error.message })
+        }
+    }
+
     async getCashFlowSummary(req: Request, res: Response) {
         try {
             const organizationId = req.user!.organizationId
