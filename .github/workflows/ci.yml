@@ -2,7 +2,7 @@ name: Continuous Integration
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   pull_request:
     branches: [main, master]
   workflow_dispatch:
@@ -28,10 +28,9 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
           --health-cmd "pg_isready -U flowforge -d flowforge"
           --health-interval 5s
-          --health-retries 5
+          --health-timeout 5s
           --health-retries 10
       redis:
         image: redis:7-alpine
@@ -42,9 +41,9 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+    defaults:
       run:
         working-directory: backend
-
     env:
       NODE_ENV: test
       DATABASE_URL: postgresql://flowforge:flowforge_dev@localhost:5432/flowforge
@@ -52,19 +51,19 @@ jobs:
       JWT_REFRESH_SECRET: ci-refresh-secret
       REDIS_HOST: localhost
       REDIS_PORT: 6379
-      - name: Checkout repository
+    steps:
       - name: Checkout
-
+        uses: actions/checkout@v4
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'npm'
           cache: npm
-
+          cache-dependency-path: backend/package-lock.json
+      - name: Install dependencies
         run: npm ci
-
       - name: Apply database migrations
-        env:
+        run: npm run db:migrate
       - name: TypeScript build
         run: npm run build
       - name: Run Jest tests
