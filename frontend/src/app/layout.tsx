@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import QueryProvider from "@/providers/QueryProvider";
+import { Toaster } from "sonner";
 import React from "react";
 
 // const geistSans = Geist({
@@ -37,6 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <QueryProvider>
           <AuthProvider>
             {children}
+            <Toaster theme="dark" position="top-right" />
           </AuthProvider>
         </QueryProvider>
       </body>

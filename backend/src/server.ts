@@ -15,7 +15,7 @@ async function startServer(){
             )
         })
 
-        worker = startNotificationWorker()
+        worker = await startNotificationWorker()
 
         process.on("SIGTERM", ()=>shutdown("SIGTERM"))
         process.on("SIGINT", ()=> shutdown("SIGINT"))

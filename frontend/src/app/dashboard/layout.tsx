@@ -71,13 +71,14 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Receipt, GitCompare, LogOut, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, Receipt, GitCompare, LogOut, ShieldCheck, BarChart3 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 const navigation = [
     { name: 'Overview', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Ledger Entries', href: '/dashboard/ledger', icon: Receipt },
     { name: 'Reconciliation', href: '/dashboard/reconciliation', icon: GitCompare },
+    { name: 'Reports', href: '/dashboard/reports', icon: BarChart3 },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {

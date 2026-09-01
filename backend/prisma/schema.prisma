@@ -202,6 +202,7 @@ model Transaction {
   currency String  @default("INR")
 
   description String
+  pendingEntries Json?
 
   status TransactionStatus @default(DRAFT)
 
@@ -314,10 +315,12 @@ model BankStatement {
   organizationId String
   organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   filename       String
+  fileHash       String?
   uploadedAt     DateTime             @default(now())
   items          ReconciliationItem[]
 
   @@index([organizationId])
+  @@index([organizationId, fileHash])
 }
 
 model ReconciliationItem {

@@ -213,7 +213,8 @@ describe("FlowForge API integration suite", () => {
         expect.objectContaining({
           description: "Vendor invoice",
           currency: "INR",
-        })
+        }),
+        "ORG_ADMIN"
       );
     });
 

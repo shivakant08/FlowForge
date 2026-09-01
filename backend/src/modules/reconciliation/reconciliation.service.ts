@@ -1,5 +1,6 @@
 import {prisma} from "../../config/database"
 import { Prisma } from "@prisma/client"
+import { findMatchingLedgerEntry } from "./matching.logic"
 
 
 export interface BankStatementRow{
@@ -10,22 +11,36 @@ export interface BankStatementRow{
 }
 
 export class ReconciliationService{
-    async processSatement(organizationId: string, filename: string, rows :BankStatementRow[]){
+    async hasStatement(organizationId: string, filename: string, fileHash?: string){
+        return Boolean(await prisma.bankStatement.findFirst({
+            where: {
+                organizationId,
+                OR: [
+                    { filename },
+                    ...(fileHash ? [{ fileHash }] : [])
+                ]
+            }
+            , select: { id: true }
+        }))
+    }
+
+    async processSatement(organizationId: string, filename: string, rows :BankStatementRow[], fileHash?: string){
         return await prisma.$transaction(async (tx: Prisma.TransactionClient)=>{
             const statement = await tx.bankStatement.create({
-                data:{organizationId, filename}
+                data:{organizationId, filename, fileHash}
             })
 
             let matchedCount = 0
 
             for(const row of rows){
-                const matchingEntry = await tx.ledgerEntry.findFirst({
+                const candidates = await tx.ledgerEntry.findMany({
                     where:{
                         account: {organizationId},
-                        amount: new Prisma.Decimal(row.amount),
                         reconciliationItem:null
-                    }
+                    },
+                    include: { transaction: true }
                 })
+                const matchingEntry = findMatchingLedgerEntry(candidates, row)
 
                 if(matchingEntry){
                     await tx.reconciliationItem.create({
@@ -69,6 +84,16 @@ export class ReconciliationService{
             include:{
                 _count:{
                     select:{items: true},
+                },
+                items:{
+                    include:{
+                        matchedEntry:{
+                            include:{
+                                account:true,
+                                transaction:true
+                            }
+                        }
+                    }
                 }
             },
             orderBy:{uploadedAt: "desc"}

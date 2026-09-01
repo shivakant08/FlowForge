@@ -8,5 +8,6 @@ const controller = new AnalyticsController()
 router.use(authenticate)
 
 router.get("/cash-flow", (req, res)=> controller.getCashFlowSummary(req, res))
+router.get("/monthly", (req, res)=> controller.getMonthlyAnalytics(req, res))
 
 export default router
