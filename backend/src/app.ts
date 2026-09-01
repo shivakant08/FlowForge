@@ -13,15 +13,25 @@ import { errorMiddleware } from "./middleware/error.middleware"
 import reportsRoutes from "./modules/reports/reports.routes"
 
 const app = express()
+const allowedOrigins = [
+  'http://localhost:3000',
+  process.env.FRONTEND_URL
+].filter(Boolean) as string[];
 
 app.use(helmet())
 app.use(cors({
-  origin: process.env.CLIENT_ORIGIN || "http://localhost:3000",
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
 }));
 app.use(express.json())
 
-app.use(express.urlencoded({extended: true}))
+app.use(express.urlencoded({ extended: true }))
 
 //ROUTES
 app.use("/api/v1/health", healthRoutes)
